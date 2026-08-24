@@ -1,26 +1,41 @@
-import { Injectable } from '@nestjs/common';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { LoginPayload } from './types/int.type';
+import { UsersService } from 'src/users/users.service';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
-  create(createAuthDto: CreateAuthDto) {
-    return 'This action adds a new auth';
+  constructor(private readonly usersService: UsersService) {}
+
+  async login(loginPayload: LoginPayload): Promise<any> {
+    try {
+      const user = await this.usersService.findByEmail(loginPayload.email);
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+      const isMatch = await bcrypt.compare(loginPayload.password, user.password);
+      if (!isMatch) {
+        throw new NotFoundException('Invalid password');
+      }
+      return user;
+    } catch (error: any) {
+      throw new NotFoundException(`Failed to login: ${error.message}`);
+    }
   }
 
-  findAll() {
-    return `This action returns all auth`;
-  }
+  // findAll() {
+  //   return `This action returns all auth`;
+  // }
 
-  findOne(id: number) {
-    return `This action returns a #${id} auth`;
-  }
+  // findOne(id: number) {
+  //   return `This action returns a #${id} auth`;
+  // }
 
-  update(id: number, updateAuthDto: UpdateAuthDto) {
-    return `This action updates a #${id} auth`;
-  }
+  // update(id: number, updateAuthDto: UpdateAuthDto) {
+  //   return `This action updates a #${id} auth`;
+  // }
 
-  remove(id: number) {
-    return `This action removes a #${id} auth`;
-  }
+  // remove(id: number) {
+  //   return `This action removes a #${id} auth`;
+  // }
 }
