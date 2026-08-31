@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString } from "@nestjs/class-validator"
+import { IsEmail, IsOptional, IsString, IsUUID } from "@nestjs/class-validator"
 
 export class CreateUserDto {
     @IsString()
@@ -17,6 +17,6 @@ export class CreateUserDto {
     declare password: string;
 
     @IsOptional()
-    @IsString()
-    declare collector: string;
+    @IsUUID()
+    declare collectorId?: string;
 }

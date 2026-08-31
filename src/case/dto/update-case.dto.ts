@@ -1,5 +1,5 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { IsBoolean, IsEnum, IsOptional } from '@nestjs/class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsUUID } from '@nestjs/class-validator';
 import { CreateCaseDto } from './create-case.dto';
 import { Status, Priority } from '../types/enum.type';
 
@@ -17,4 +17,9 @@ export class UpdateCaseDto extends PartialType(CreateCaseDto) {
     @IsOptional()
     @IsBoolean()
     declare caseVerified?: boolean;
+
+    // Dispatch: hand the case to a collector organisation.
+    @IsOptional()
+    @IsUUID()
+    declare collectorId?: string;
 }

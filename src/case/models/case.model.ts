@@ -1,6 +1,7 @@
 import { AllowNull, BelongsTo, Column, DataType, ForeignKey, Model, Table } from 'sequelize-typescript';
 import { Status, Priority } from '../types/enum.type';
 import { User } from '../../users/models/user.model';
+import { Collector } from '../../collectors/models/collector.model';
 
 // paranoid: destroy() fills deletedAt instead of removing the row, so closed and
 // rejected cases stay available to the analytics module.
@@ -32,6 +33,15 @@ export class Case extends Model {
 
     @BelongsTo(() => User)
     declare reporter: User;
+
+    // The organisation dispatched to clear this case. Null until assigned.
+    @AllowNull
+    @ForeignKey(() => Collector)
+    @Column({ type: DataType.UUID })
+    declare collectorId: string;
+
+    @BelongsTo(() => Collector)
+    declare collector: Collector;
 
     @AllowNull
     @Column({ type: DataType.STRING })

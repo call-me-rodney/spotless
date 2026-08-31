@@ -8,6 +8,7 @@ import {
 import { InjectModel } from '@nestjs/sequelize';
 import { Case } from './models/case.model';
 import { User } from '../users/models/user.model';
+import { Collector } from '../collectors/models/collector.model';
 import { CreateCaseDto } from './dto/create-case.dto';
 import { UpdateCaseDto } from './dto/update-case.dto';
 import { Status, Priority } from './types/enum.type';
@@ -18,10 +19,10 @@ export class CaseService {
 
   // Joined on every read. The explicit attribute list keeps the reporter's
   // password hash from ever reaching a response body.
-  private readonly reporterInclude = {
-    model: User,
-    attributes: ['id', 'firstName', 'lastName', 'email'],
-  };
+  private readonly caseIncludes = [
+    { model: User, attributes: ['id', 'firstName', 'lastName', 'email'] },
+    { model: Collector, attributes: ['id', 'name'] },
+  ];
 
   async create(createCaseDto: CreateCaseDto, imagePath: string): Promise<Case> {
     const latitude = this.toCoordinate(createCaseDto.latitude, 'latitude', 90);
@@ -50,7 +51,7 @@ export class CaseService {
   async findAll(): Promise<Case[]> {
     try {
       return await this.caseModel.findAll({
-        include: [this.reporterInclude],
+        include: this.caseIncludes,
         order: [['createdAt', 'DESC']],
       });
     } catch (error: any) {
@@ -60,7 +61,7 @@ export class CaseService {
 
   async findOne(id: string): Promise<Case> {
     try {
-      const found = await this.caseModel.findByPk(id, { include: [this.reporterInclude] });
+      const found = await this.caseModel.findByPk(id, { include: this.caseIncludes });
       if (!found) {
         throw new NotFoundException(`Case '${id}' not found`);
       }
@@ -89,6 +90,9 @@ export class CaseService {
       }
       if (updateCaseDto.description !== undefined) {
         changes.description = updateCaseDto.description;
+      }
+      if (updateCaseDto.collectorId !== undefined) {
+        changes.collectorId = updateCaseDto.collectorId;
       }
       if (updateCaseDto.priority !== undefined) {
         changes.priority = this.toEnum(updateCaseDto.priority, Priority, 'priority');
@@ -173,7 +177,11 @@ export class CaseService {
       return error;
     }
     if (error?.name === 'SequelizeForeignKeyConstraintError') {
-      return new BadRequestException("'reporterId' does not match a known user");
+      // Two FKs now, so name the one that actually failed rather than
+      // always blaming the reporter.
+      return String(error?.index ?? '').includes('collector')
+        ? new BadRequestException("'collectorId' does not match a known collector")
+        : new BadRequestException("'reporterId' does not match a known user");
     }
     return new InternalServerErrorException(`${context}: ${error?.message ?? 'unknown error'}`);
   }

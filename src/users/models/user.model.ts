@@ -1,5 +1,7 @@
-import { AllowNull, Column, DataType, Model, Table,  } from 'sequelize-typescript';
+import { AllowNull, BelongsTo, Column, DataType, ForeignKey, HasMany, Model, Table } from 'sequelize-typescript';
 import type { Roles } from '../types/enum.type';
+import { Collector } from '../../collectors/models/collector.model';
+import { Case } from '../../case/models/case.model';
 
 @Table
 export class User extends Model {
@@ -18,9 +20,14 @@ export class User extends Model {
   @Column
   declare role: Roles;
 
+  // Nullable: a citizen spotter belongs to no organisation.
   @AllowNull
-  @Column
-  declare collector: string;
+  @ForeignKey(() => Collector)
+  @Column({ type: DataType.UUID })
+  declare collectorId: string;
+
+  @BelongsTo(() => Collector)
+  declare collector: Collector;
 
   @Column
   declare password: string;
@@ -28,14 +35,12 @@ export class User extends Model {
   @Column({ defaultValue: true })
   declare isActive: boolean;
 
-  @Column({defaultValue: new Date()})
-  declare createdAt: Date;
+  // The cases this user has reported. The FK is named `reporterId`, so it has
+  // to be stated — the convention default would look for `userId`.
+  @HasMany(() => Case, 'reporterId')
+  declare cases: Case[];
 
-  @AllowNull
-  @Column
-  declare updatedAt: Date;
-
-  //associations
-  // users:cases 1:many
-  // user:collector many:many
+  // createdAt / updatedAt are managed by Sequelize. They were declared by hand
+  // with `defaultValue: new Date()`, which evaluates once at module load and
+  // stamped every row with the server's boot time.
 }
