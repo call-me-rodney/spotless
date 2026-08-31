@@ -1,8 +1,11 @@
-import { AllowNull, Column, Model, Table } from 'sequelize-typescript';
+import { AllowNull, Column, DataType, Model, Table,  } from 'sequelize-typescript';
 import type { Roles } from '../types/enum.type';
 
 @Table
 export class User extends Model {
+  @Column({primaryKey:true, type: DataType.UUID, defaultValue: DataType.UUIDV4})
+  declare id: string;
+
   @Column
   declare firstName: string;
 
