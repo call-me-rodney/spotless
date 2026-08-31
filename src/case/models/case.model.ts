@@ -1,47 +1,55 @@
-import { AllowNull, Column, DataType, Model, Table } from 'sequelize-typescript';
-import type { Status, Priority } from '../types/enum.type';
+import { AllowNull, BelongsTo, Column, DataType, ForeignKey, Model, Table } from 'sequelize-typescript';
+import { Status, Priority } from '../types/enum.type';
+import { User } from '../../users/models/user.model';
 
-@Table({tableName:'cases'})
+// paranoid: destroy() fills deletedAt instead of removing the row, so closed and
+// rejected cases stay available to the analytics module.
+@Table({ tableName: 'cases', paranoid: true })
 export class Case extends Model {
-    @Column({primaryKey:true, type: DataType.UUID, defaultValue: DataType.UUIDV4})
+    @Column({ primaryKey: true, type: DataType.UUID, defaultValue: DataType.UUIDV4 })
     declare id: string;
 
-    @Column
+    @Column({ type: DataType.STRING })
     declare imagePath: string;
 
-    @AllowNull
-    @Column
+    @Column({ type: DataType.BOOLEAN, defaultValue: false })
     declare caseVerified: boolean;
 
-    @Column
-    declare location: string;
+    // Split out of the old `location` string so routing can do distance maths
+    // and analytics can group by area without parsing.
+    @Column({ type: DataType.DOUBLE })
+    declare latitude: number;
 
-    @Column
+    @Column({ type: DataType.DOUBLE })
+    declare longitude: number;
+
+    @Column({ type: DataType.DATE })
     declare timeTaken: Date;
 
-    @Column
-    declare reporter: string;
+    @ForeignKey(() => User)
+    @Column({ type: DataType.UUID })
+    declare reporterId: string;
+
+    @BelongsTo(() => User)
+    declare reporter: User;
 
     @AllowNull
-    @Column
+    @Column({ type: DataType.STRING })
     declare description: string;
 
-    @Column
+    // Explicit `type` on the enum columns: a bare @Column would fall back to
+    // design:type reflection, which cannot resolve an enum to a SQL type.
+    @Column({ type: DataType.STRING, defaultValue: Status.pending })
     declare status: Status;
 
     @AllowNull
-    @Column
+    @Column({ type: DataType.STRING })
     declare priority: Priority;
 
-    @Column({defaultValue: new Date()})
-    declare createdAt: Date;
-
-    @Column({defaultValue: new Date()})
-    declare updatedAt: Date;
-
-    @Column
+    @AllowNull
+    @Column({ type: DataType.DATE })
     declare closedAt: Date;
 
-    @Column
-    declare deletedAt: Date;
+    // createdAt / updatedAt / deletedAt are managed by Sequelize (timestamps +
+    // paranoid) — declaring them by hand froze the default at process start.
 }

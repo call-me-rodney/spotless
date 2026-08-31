@@ -1,6 +1,6 @@
 export enum Status {
     pending = "pending",
-    open = "",
+    open = "open",
     inProgress = "inProgress",
     closed = "closed",
     rejected = "rejected"
