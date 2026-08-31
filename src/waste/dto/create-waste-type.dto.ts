@@ -3,7 +3,7 @@ import { hazardLevel } from '../types/enum.types';
 
 // A waste type — the catalog entry. Only `name` is required, so the CNN's
 // auto-create path can register a label it has never seen before.
-export class CreateWasteDto {
+export class CreateWasteTypeDto {
     @IsString()
     @IsNotEmpty()
     declare name: string;

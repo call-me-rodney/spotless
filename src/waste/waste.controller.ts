@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { WasteService } from './waste.service';
-import { CreateWasteDto } from './dto/create-waste.dto';
-import { UpdateWasteDto } from './dto/update-waste.dto';
+import { CreateWasteTypeDto } from './dto/create-waste-type.dto';
+import { UpdateWasteTypeDto } from './dto/update-waste-type.dto';
 import { CreateWasteInstanceDto } from './dto/create-waste-instance.dto';
 import { UpdateWasteInstanceDto } from './dto/update-waste-instance.dto';
 
@@ -12,8 +12,8 @@ export class WasteController {
   // ---- catalog: the waste types the platform recognises -----------------
 
   @Post('types')
-  createType(@Body() createWasteDto: CreateWasteDto) {
-    return this.wasteService.createType(createWasteDto);
+  createType(@Body() createWasteTypeDto: CreateWasteTypeDto) {
+    return this.wasteService.createType(createWasteTypeDto);
   }
 
   @Get('types')
@@ -27,8 +27,8 @@ export class WasteController {
   }
 
   @Patch('types/:id')
-  updateType(@Param('id') id: string, @Body() updateWasteDto: UpdateWasteDto) {
-    return this.wasteService.updateType(id, updateWasteDto);
+  updateType(@Param('id') id: string, @Body() updateWasteTypeDto: UpdateWasteTypeDto) {
+    return this.wasteService.updateType(id, updateWasteTypeDto);
   }
 
   @Delete('types/:id')

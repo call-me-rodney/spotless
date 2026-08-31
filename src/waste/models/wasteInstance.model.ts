@@ -1,5 +1,5 @@
 import { AllowNull, BelongsTo, Column, DataType, ForeignKey, Model, Table } from "sequelize-typescript";
-import { Waste } from "./wasteType.model";
+import { WasteType } from "./wasteType.model";
 import { Case } from "../../case/models/case.model";
 
 // One row per detection: "the CNN found N of this waste type in this case".
@@ -9,12 +9,12 @@ export class WasteInstance extends Model {
     @Column({ primaryKey: true, type: DataType.UUID, defaultValue: DataType.UUIDV4 })
     declare id: string;
 
-    @ForeignKey(() => Waste)
+    @ForeignKey(() => WasteType)
     @Column({ type: DataType.UUID })
     declare wasteTypeId: string;
 
-    @BelongsTo(() => Waste)
-    declare wasteType: Waste;
+    @BelongsTo(() => WasteType)
+    declare wasteType: WasteType;
 
     // Replaces the old `cases` array — one detection belongs to one case.
     @ForeignKey(() => Case)

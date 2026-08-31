@@ -7,52 +7,52 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op, Transaction } from 'sequelize';
-import { Waste } from './models/wasteType.model';
+import { WasteType } from './models/wasteType.model';
 import { WasteInstance } from './models/wasteInstance.model';
 import { Case } from '../case/models/case.model';
-import { CreateWasteDto } from './dto/create-waste.dto';
-import { UpdateWasteDto } from './dto/update-waste.dto';
+import { CreateWasteTypeDto } from './dto/create-waste-type.dto';
+import { UpdateWasteTypeDto } from './dto/update-waste-type.dto';
 import { CreateWasteInstanceDto } from './dto/create-waste-instance.dto';
 import { UpdateWasteInstanceDto } from './dto/update-waste-instance.dto';
 
 @Injectable()
 export class WasteService {
   constructor(
-    @InjectModel(Waste) private wasteModel: typeof Waste,
+    @InjectModel(WasteType) private wasteTypeModel: typeof WasteType,
     @InjectModel(WasteInstance) private wasteInstanceModel: typeof WasteInstance,
   ) {}
 
   private readonly instanceIncludes = [
-    { model: Waste },
+    { model: WasteType },
     { model: Case, attributes: ['id', 'status', 'latitude', 'longitude', 'imagePath'] },
   ];
 
   // ---------------------------------------------------------------- types
 
-  async createType(createWasteDto: CreateWasteDto): Promise<Waste> {
+  async createType(createWasteTypeDto: CreateWasteTypeDto): Promise<WasteType> {
     try {
-      const name = this.normaliseName(createWasteDto.name);
+      const name = this.normaliseName(createWasteTypeDto.name);
       const existing = await this.findTypeByName(name);
       if (existing) {
         throw new BadRequestException(`Waste type '${existing.name}' already exists`);
       }
-      return await this.wasteModel.create({ ...createWasteDto, name } as any);
+      return await this.wasteTypeModel.create({ ...createWasteTypeDto, name } as any);
     } catch (error: any) {
       throw this.asHttpError(error, 'Failed to create waste type');
     }
   }
 
-  async findAllTypes(): Promise<Waste[]> {
+  async findAllTypes(): Promise<WasteType[]> {
     try {
-      return await this.wasteModel.findAll({ order: [['name', 'ASC']] });
+      return await this.wasteTypeModel.findAll({ order: [['name', 'ASC']] });
     } catch (error: any) {
       throw this.asHttpError(error, 'Failed to retrieve waste types');
     }
   }
 
-  async findOneType(id: string): Promise<Waste> {
+  async findOneType(id: string): Promise<WasteType> {
     try {
-      const found = await this.wasteModel.findByPk(id);
+      const found = await this.wasteTypeModel.findByPk(id);
       if (!found) {
         throw new NotFoundException(`Waste type '${id}' not found`);
       }
@@ -62,13 +62,13 @@ export class WasteService {
     }
   }
 
-  async updateType(id: string, updateWasteDto: UpdateWasteDto): Promise<Waste> {
+  async updateType(id: string, updateWasteTypeDto: UpdateWasteTypeDto): Promise<WasteType> {
     try {
       const found = await this.findOneType(id);
-      const changes: Partial<Waste> = { ...(updateWasteDto as Partial<Waste>) };
+      const changes: Partial<WasteType> = { ...(updateWasteTypeDto as Partial<WasteType>) };
 
-      if (updateWasteDto.name !== undefined) {
-        const name = this.normaliseName(updateWasteDto.name);
+      if (updateWasteTypeDto.name !== undefined) {
+        const name = this.normaliseName(updateWasteTypeDto.name);
         const clash = await this.findTypeByName(name);
         if (clash && clash.id !== id) {
           throw new BadRequestException(`Waste type '${clash.name}' already exists`);
@@ -201,7 +201,7 @@ export class WasteService {
   private async resolveWasteType(
     dto: { wasteTypeId?: string; wasteTypeName?: string },
     transaction?: Transaction,
-  ): Promise<Waste> {
+  ): Promise<WasteType> {
     if (dto.wasteTypeId) {
       return await this.findOneType(dto.wasteTypeId);
     }
@@ -212,12 +212,12 @@ export class WasteService {
 
     const name = this.normaliseName(dto.wasteTypeName);
     const existing = await this.findTypeByName(name, transaction);
-    return existing ?? (await this.wasteModel.create({ name } as any, { transaction }));
+    return existing ?? (await this.wasteTypeModel.create({ name } as any, { transaction }));
   }
 
-  private async findTypeByName(name: string, transaction?: Transaction): Promise<Waste | null> {
+  private async findTypeByName(name: string, transaction?: Transaction): Promise<WasteType | null> {
     // iLike with no wildcards is a case-insensitive exact match on Postgres.
-    return await this.wasteModel.findOne({ where: { name: { [Op.iLike]: name } }, transaction });
+    return await this.wasteTypeModel.findOne({ where: { name: { [Op.iLike]: name } }, transaction });
   }
 
   private normaliseName(raw: string): string {

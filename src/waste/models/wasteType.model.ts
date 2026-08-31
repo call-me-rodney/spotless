@@ -5,7 +5,7 @@ import { WasteInstance } from "./wasteInstance.model";
 // The curated taxonomy: plastic bottles, banana peels, polythene bags.
 // paranoid so retiring a type never orphans the instances that reference it.
 @Table({ tableName: "wasteTypes", paranoid: true })
-export class Waste extends Model {
+export class WasteType extends Model {
     @Column({ primaryKey: true, type: DataType.UUID, defaultValue: DataType.UUIDV4 })
     declare id: string;
 
