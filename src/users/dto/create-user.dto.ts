@@ -2,10 +2,10 @@ import { IsEmail, IsOptional, IsString } from "@nestjs/class-validator"
 
 export class CreateUserDto {
     @IsString()
-    declare firstname: string;
+    declare firstName: string;
 
     @IsString()
-    declare lastname: string;
+    declare lastName: string;
 
     @IsEmail()
     declare email: string;

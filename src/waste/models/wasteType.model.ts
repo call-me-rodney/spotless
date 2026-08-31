@@ -1,29 +1,32 @@
-import { Column, DataType, Model, Table } from "sequelize-typescript";
-import type { hazardLevel } from "../types/enum.types";
+import { AllowNull, Column, DataType, HasMany, Model, Table } from "sequelize-typescript";
+import { hazardLevel } from "../types/enum.types";
+import { WasteInstance } from "./wasteInstance.model";
 
-@Table({ tableName: "wasteTypes" })
+// The curated taxonomy: plastic bottles, banana peels, polythene bags.
+// paranoid so retiring a type never orphans the instances that reference it.
+@Table({ tableName: "wasteTypes", paranoid: true })
 export class Waste extends Model {
     @Column({ primaryKey: true, type: DataType.UUID, defaultValue: DataType.UUIDV4 })
     declare id: string;
 
-    @Column
+    // Unique so the auto-create path in WasteService cannot fork the catalog.
+    @Column({ type: DataType.STRING, unique: true })
     declare name: string;
 
-    @Column
+    // Nullable: a type auto-created from a CNN label knows only its name,
+    // and an admin fills in the rest afterwards.
+    @AllowNull
+    @Column({ type: DataType.STRING })
     declare description: string;
 
-    @Column
+    @AllowNull
+    @Column({ type: DataType.STRING })
     declare material: string;
 
-    @Column
+    @AllowNull
+    @Column({ type: DataType.STRING })
     declare hazardLevel: hazardLevel;
 
-    @Column
-    declare createdAt: Date;
-
-    @Column
-    declare updatedAt: Date;
-
-    @Column
-    declare deletedAt: Date;
+    @HasMany(() => WasteInstance)
+    declare instances: WasteInstance[];
 }
