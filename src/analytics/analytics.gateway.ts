@@ -1,34 +1,42 @@
-import { WebSocketGateway, SubscribeMessage, MessageBody } from '@nestjs/websockets';
+import { OnModuleInit } from '@nestjs/common';
+import {
+  OnGatewayConnection,
+  SubscribeMessage,
+  WebSocketGateway,
+  WebSocketServer,
+} from '@nestjs/websockets';
+import { Server, Socket } from 'socket.io';
 import { AnalyticsService } from './analytics.service';
-import { CreateAnalyticsDto } from './dto/create-analytics.dto';
-import { UpdateAnalyticsDto } from './dto/update-analytics.dto';
 
-@WebSocketGateway()
-export class AnalyticsGateway {
+// The one event dashboards listen for.
+export const SNAPSHOT_EVENT = 'analytics:snapshot';
+
+// cors is wide open for local dashboard development — tighten to the real
+// dashboard origin before this is exposed anywhere.
+@WebSocketGateway({ cors: { origin: '*' } })
+export class AnalyticsGateway implements OnGatewayConnection, OnModuleInit {
+  @WebSocketServer()
+  private server!: Server;
+
   constructor(private readonly analyticsService: AnalyticsService) {}
 
-  @SubscribeMessage('createAnalytics')
-  create(@MessageBody() createAnalyticsDto: CreateAnalyticsDto) {
-    return this.analyticsService.create(createAnalyticsDto);
+  // Subscribing here (rather than the service calling the gateway) keeps the
+  // dependency pointing one way: gateway -> service, never back.
+  onModuleInit(): void {
+    this.analyticsService.snapshots$.subscribe((snapshot) => {
+      this.server?.emit(SNAPSHOT_EVENT, snapshot);
+    });
   }
 
-  @SubscribeMessage('findAllAnalytics')
-  findAll() {
-    return this.analyticsService.findAll();
+  // A dashboard gets the current picture immediately, then only deltas as
+  // writes happen — no polling.
+  async handleConnection(client: Socket): Promise<void> {
+    client.emit(SNAPSHOT_EVENT, await this.analyticsService.snapshot());
   }
 
-  @SubscribeMessage('findOneAnalytics')
-  findOne(@MessageBody() id: number) {
-    return this.analyticsService.findOne(id);
-  }
-
-  @SubscribeMessage('updateAnalytics')
-  update(@MessageBody() updateAnalyticsDto: UpdateAnalyticsDto) {
-    return this.analyticsService.update(updateAnalyticsDto.id, updateAnalyticsDto);
-  }
-
-  @SubscribeMessage('removeAnalytics')
-  remove(@MessageBody() id: number) {
-    return this.analyticsService.remove(id);
+  // Escape hatch for a client that reconnects and wants to resync at once.
+  @SubscribeMessage('analytics:refresh')
+  async refresh() {
+    return { event: SNAPSHOT_EVENT, data: await this.analyticsService.snapshot() };
   }
 }
