@@ -2,6 +2,7 @@ import { Injectable, InternalServerErrorException, NotFoundException } from '@ne
 import { InjectModel } from '@nestjs/sequelize';
 import { User } from './models/user.model';
 import * as bcrypt from 'bcrypt';
+import type { CreateUserResponse } from './types/int.type';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -9,12 +10,21 @@ import { UpdateUserDto } from './dto/update-user.dto';
 export class UsersService {
   constructor(@InjectModel(User) private userModel: typeof User) {}
 
-  async create(createUserDto: CreateUserDto): Promise<User> {
+  async create(createUserDto: CreateUserDto): Promise<CreateUserResponse> {
     try {
       const hashedpassword = await bcrypt.hash(createUserDto.password, 10);
       createUserDto.password = hashedpassword;
       const user = await this.userModel.create(createUserDto as any);
-      return user;
+      const userData: CreateUserResponse = {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        collectorId: user.collectorId,
+        isActive: user.isActive,
+      };
+      return userData;
     } catch (error: any) {
       throw new InternalServerErrorException(`Failed to create user: ${error.message}`);
     }
@@ -22,7 +32,11 @@ export class UsersService {
 
   async findAll(): Promise<User[]> {
     try {
-      return await this.userModel.findAll();
+      return await this.userModel.findAll({
+        attributes: {
+          exclude: ['password'],
+        },
+      });
     } catch (error: any) {
       throw new NotFoundException(`Failed to retrieve users: ${error.message}`);
     }
@@ -30,7 +44,12 @@ export class UsersService {
 
   async findByEmail(email: string): Promise<User> {
     try {
-      const user = await this.userModel.findOne({ where: { email } });
+      const user = await this.userModel.findOne({ 
+        attributes: {
+          exclude: ['password'],
+        },
+        where: { email } 
+      });
       if (!user) {
         throw new NotFoundException('User not found');
       }
@@ -42,7 +61,12 @@ export class UsersService {
 
   async findOne(id: string): Promise<User> {
     try {
-      const user = await this.userModel.findByPk(id);
+      const user = await this.userModel.findByPk(id, {
+        attributes: {
+          exclude: ['password'],
+        },
+      });
+
       if (!user) {
         throw new NotFoundException('User not found');
       }
@@ -53,10 +77,17 @@ export class UsersService {
   } 
   
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<User | string> {
     try {
       const user = await this.findOne(id);
-      return user.update(updateUserDto);
+
+      if (updateUserDto.password) {
+        const hashedPassword = await bcrypt.hash(updateUserDto.password, 10);
+        updateUserDto.password = hashedPassword;
+      }
+      
+      await user.update(updateUserDto);
+      return `User with ID ${id} has been updated successfully.`;
     } catch (error: any) {
       throw new InternalServerErrorException(`Failed to update user: ${error.message}`);
     }
