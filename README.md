@@ -46,6 +46,20 @@ A global `ValidationPipe` runs with `whitelist: true` and `transform: true`:
 - **Unknown properties are silently stripped.** Sending `{"name":"x","isAdmin":true}` stores only `name`. You cannot set server-controlled fields such as `id` or `createdAt` by including them.
 - Type and constraint failures return **400** with an array of messages.
 
+### CORS
+
+Open to **all origins**, on both the REST API and the Socket.IO endpoint — a browser app on any host can call this server directly.
+
+```
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET,POST,PATCH,DELETE,OPTIONS
+Access-Control-Allow-Headers: Content-Type,Accept
+```
+
+`Access-Control-Allow-Credentials` is **not** set, because the CORS spec forbids pairing it with a wildcard origin and browsers reject the combination. Nothing needs it today — there are no cookies and no auth headers. If authentication arrives later, the wildcard has to be replaced by an explicit origin list at the same time.
+
+Restrict `origin` to the dashboard's own host before any real deployment.
+
 ### Error shape
 
 Every error is a standard Nest exception body:
