@@ -17,7 +17,6 @@ export class CollectorsController {
     return this.collectorsService.findAll();
   }
 
-  // ids are UUIDs — the scaffold's `+id` coerced them to NaN.
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.collectorsService.findOne(id);

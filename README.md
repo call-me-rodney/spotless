@@ -623,11 +623,9 @@ Iterate the enum and default to `0` rather than reading `byStatus.rejected` dire
 Current, deliberate limitations. Plan around them.
 
 1. **No authentication or authorisation anywhere.** Any client can create users, dispatch cases, change any case's `status` or `caseVerified`, or post ML detections. This is the documented MVP scope.
-2. **User responses include the bcrypt password hash.** `GET /users`, `POST /users` and `POST /auth` all return it. Joined `reporter` and `staff` objects do not.
-3. **`PATCH /users/:id` does not hash passwords.** `POST /users` hashes with bcrypt, but `PATCH` writes the body through unchanged — a password sent to `PATCH` is stored in **plaintext** and will then fail login, which compares against a hash.
-4. **Route planning does not dispatch.** A plan reserves its cases against re-planning, but sets no `collectorId` and changes no case `status`; do that with `PATCH /case/:id`.
-5. **Uploaded images are not served.** `imagePath` is a server-relative path with no static route configured.
-6. **`GET /users` has no stable ordering.** Other list endpoints do sort (`/case` and `/waste/instances` newest first, `/collectors` and `/waste/types` by name).
-7. **`role` is not enum-validated** on `CreateUserDto`; it accepts any string.
-8. **The WebSocket gateway is single-instance.** Broadcasts reach only clients connected to the same process; running more than one server needs a Redis adapter or Postgres `LISTEN/NOTIFY`.
-9. **`sync: { alter: true }` runs on every boot.** Convenient in development, but it will reshape tables to match the models — replace with migrations before deploying.
+2. **Route planning does not dispatch.** A plan reserves its cases against re-planning, but sets no `collectorId` and changes no case `status`; do that with `PATCH /case/:id`.
+3. **Uploaded images are not served.** `imagePath` is a server-relative path with no static route configured.
+4. **`GET /users` has no stable ordering.** Other list endpoints do sort (`/case` and `/waste/instances` newest first, `/collectors` and `/waste/types` by name).
+5. **`role` is not enum-validated** on `CreateUserDto`; it accepts any string.
+6. **The WebSocket gateway is single-instance.** Broadcasts reach only clients connected to the same process; running more than one server needs a Redis adapter or Postgres `LISTEN/NOTIFY`.
+7. **`sync: { alter: true }` runs on every boot.** Convenient in development, but it will reshape tables to match the models — replace with migrations before deploying.
