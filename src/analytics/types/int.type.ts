@@ -41,20 +41,26 @@ export interface TrackedCase {
 export interface RouteView {
     id: string;
     name: string;
-    length: number;
-    estTime: number;
-    // Ordered stops, resolved from the route's case id list.
-    stops: RouteStop[];
-    // Ids on the route that no longer resolve to a live case.
-    unresolvedCaseIds: string[];
+    status: string;
+    collectorId: string;
+    totalDistanceMeters: number | null;
+    totalDurationSeconds: number | null;
+    // Google's encoded polyline for drawing the run, when one was computed.
+    encodedPolyline: string | null;
+    // Ordered by sequence. No `unresolvedCaseIds` companion is needed any
+    // more — a foreign key cannot point at a case that is not there.
+    stops: RouteStopView[];
 }
 
-export interface RouteStop {
+export interface RouteStopView {
     caseId: string;
-    latitude: number;
-    longitude: number;
+    sequence: number;
     status: string;
+    latitude: number | null;
+    longitude: number | null;
+    caseStatus: string | null;
     priority: string | null;
+    estimatedArrival: string | null;
 }
 
 // ---- 2. cases overview -------------------------------------------------

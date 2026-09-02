@@ -7,7 +7,8 @@ import { Case } from '../case/models/case.model';
 import { Collector } from '../collectors/models/collector.model';
 import { WasteInstance } from '../waste/models/wasteInstance.model';
 import { WasteType } from '../waste/models/wasteType.model';
-import { Routing } from '../routing/models/routing.model';
+import { Route } from '../routing/models/route.model';
+import { RouteStop } from '../routing/models/routeStop.model';
 import { Status, Priority } from '../case/types/enum.type';
 import type {
   AnalyticsSnapshot,
@@ -58,7 +59,7 @@ export class AnalyticsService implements OnModuleInit {
     @InjectModel(Case) private caseModel: typeof Case,
     @InjectModel(WasteInstance) private wasteInstanceModel: typeof WasteInstance,
     @InjectModel(WasteType) private wasteTypeModel: typeof WasteType,
-    @InjectModel(Routing) private routingModel: typeof Routing,
+    @InjectModel(Route) private routeModel: typeof Route,
   ) {}
 
   private readonly dirty = new Subject<void>();
@@ -81,7 +82,7 @@ export class AnalyticsService implements OnModuleInit {
       this.caseModel,
       this.wasteInstanceModel,
       this.wasteTypeModel,
-      this.routingModel,
+      this.routeModel,
     ] as unknown as Hookable[];
 
     for (const model of watched) {
@@ -156,43 +157,42 @@ export class AnalyticsService implements OnModuleInit {
     return { points, activeCases, routes: await this.routeViews() };
   }
 
-  // Routing stores an ordered array of case ids rather than a join table, so
-  // the stops are resolved here and any stale id is reported explicitly.
+  // Stops come back ordered and already joined to their case. The previous
+  // string-array model needed a second query plus a stale-id reconciliation
+  // pass; the foreign key makes both unnecessary.
   private async routeViews(): Promise<RouteView[]> {
-    const routes = await this.routingModel.findAll({ order: [['createdAt', 'DESC']] });
-    if (routes.length === 0) {
-      return [];
-    }
-
-    const referenced = [...new Set(routes.flatMap((r) => r.cases ?? []))];
-    const stopCases = await this.caseModel.findAll({
-      where: { id: { [Op.in]: referenced } },
-      attributes: ['id', 'latitude', 'longitude', 'status', 'priority'],
+    const routes = await this.routeModel.findAll({
+      include: [
+        {
+          model: RouteStop,
+          include: [{ model: Case, attributes: ['id', 'latitude', 'longitude', 'status', 'priority'] }],
+        },
+      ],
+      order: [
+        ['createdAt', 'DESC'],
+        [RouteStop, 'sequence', 'ASC'],
+      ],
     });
-    const byId = new Map(stopCases.map((c) => [c.id, c]));
 
-    return routes.map((route) => {
-      const ids = route.cases ?? [];
-      return {
-        id: route.id,
-        name: route.name,
-        length: route.length,
-        estTime: route.estTime,
-        stops: ids
-          .filter((id) => byId.has(id))
-          .map((id) => {
-            const c = byId.get(id)!;
-            return {
-              caseId: c.id,
-              latitude: c.latitude,
-              longitude: c.longitude,
-              status: c.status,
-              priority: c.priority ?? null,
-            };
-          }),
-        unresolvedCaseIds: ids.filter((id) => !byId.has(id)),
-      };
-    });
+    return routes.map((route) => ({
+      id: route.id,
+      name: route.name,
+      status: route.status,
+      collectorId: route.collectorId,
+      totalDistanceMeters: route.totalDistanceMeters ?? null,
+      totalDurationSeconds: route.totalDurationSeconds ?? null,
+      encodedPolyline: route.encodedPolyline ?? null,
+      stops: (route.stops ?? []).map((stop) => ({
+        caseId: stop.caseId,
+        sequence: stop.sequence,
+        status: stop.status,
+        latitude: stop.case?.latitude ?? null,
+        longitude: stop.case?.longitude ?? null,
+        caseStatus: stop.case?.status ?? null,
+        priority: stop.case?.priority ?? null,
+        estimatedArrival: stop.estimatedArrival?.toISOString() ?? null,
+      })),
+    }));
   }
 
   // ---- 2. cases overview ----------------------------------------------

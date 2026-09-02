@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
+import { SequelizeModule } from '@nestjs/sequelize';
 import { RoutingService } from './routing.service';
 import { RoutingController } from './routing.controller';
-import { Routing } from './models/routing.model';
-import { SequelizeModule } from '@nestjs/sequelize';
+import { Route } from './models/route.model';
+import { RouteStop } from './models/routeStop.model';
 
 @Module({
-  imports: [SequelizeModule.forFeature([Routing])],
+  imports: [SequelizeModule.forFeature([Route, RouteStop])],
   controllers: [RoutingController],
   providers: [RoutingService],
 })
