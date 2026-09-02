@@ -1,8 +1,8 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op, fn, col } from 'sequelize';
-import { Subject, from } from 'rxjs';
-import { auditTime, switchMap, share } from 'rxjs/operators';
+import { Subject, from, EMPTY } from 'rxjs';
+import { auditTime, switchMap, share, catchError } from 'rxjs/operators';
 import { Case } from '../case/models/case.model';
 import { Collector } from '../collectors/models/collector.model';
 import { WasteInstance } from '../waste/models/wasteInstance.model';
@@ -62,14 +62,26 @@ export class AnalyticsService implements OnModuleInit {
     @InjectModel(Route) private routeModel: typeof Route,
   ) {}
 
+  private readonly logger = new Logger(AnalyticsService.name);
   private readonly dirty = new Subject<void>();
 
   // The gateway subscribes to this; nothing else in the app knows it exists.
   // auditTime (not debounceTime) guarantees a steady write stream still
   // produces updates rather than starving while writes keep arriving.
+  // The inner catchError is load-bearing: without it a failed recompute became
+  // an unhandled RxJS error that killed the whole Node process, not just the
+  // broadcast. Catching inside switchMap drops the bad tick and leaves the
+  // stream — and the server — alive.
   readonly snapshots$ = this.dirty.pipe(
     auditTime(RECOMPUTE_WINDOW_MS),
-    switchMap(() => from(this.snapshot())),
+    switchMap(() =>
+      from(this.snapshot()).pipe(
+        catchError((error: any) => {
+          this.logger.error(`Snapshot recompute failed, skipping this update: ${error?.message ?? error}`);
+          return EMPTY;
+        }),
+      ),
+    ),
     share(),
   );
 
@@ -170,7 +182,9 @@ export class AnalyticsService implements OnModuleInit {
       ],
       order: [
         ['createdAt', 'DESC'],
-        [RouteStop, 'sequence', 'ASC'],
+        // Must name the association alias: passing the bare model class makes
+        // Sequelize fail to resolve it and throw at query-build time.
+        [{ model: RouteStop, as: 'stops' }, 'sequence', 'ASC'],
       ],
     });
 

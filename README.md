@@ -7,6 +7,7 @@ This document is the contract for anyone building against the server — the web
 - **Base URL:** `http://localhost:3000`
 - **Stack:** NestJS 11, Sequelize 6 (`sequelize-typescript`), PostgreSQL, Socket.IO
 - **Auth:** none. Role-based access, sessions and JWT are explicitly out of scope for the MVP, so **every endpoint below is unauthenticated**.
+- **Optional env vars:** `GOOGLE_MAPS_API_KEY`, `OPENWEATHER_API_KEY` — see [Routing](#routing). Everything works without them.
 
 ```bash
 npm install
@@ -388,19 +389,75 @@ curl -X POST http://localhost:3000/waste/instances \
 
 ## Routing
 
-> **Not implemented.** The five routes below are mapped and will respond, but `RoutingService` still returns placeholder strings such as `"This action returns all routing"`. Do not build against them yet.
+Plans a collection run: pick nearby cases worth visiting, put them in a sensible order, and store the result.
 
-`POST` `/routing` · `GET` `/routing` · `GET` `/routing/:id` · `PATCH` `/routing/:id` · `DELETE` `/routing/:id`
+A `Route` carries `id`, `name`, `collectorId`, `status` (`RouteStatus`), `plannedFor` (date), `originLatitude`, `originLongitude`, `totalDistanceMeters`, `totalDurationSeconds`, `encodedPolyline`, `provider` (`RouteProvider`), `optimizedAt`, a joined `collector`, and `stops` **ordered by `sequence`**.
 
-The database schema **is** in place, and routes already appear in the analytics snapshot once rows exist.
+Each `RouteStop` carries `id`, `routeId`, `caseId`, `sequence` (1-based), `legDistanceMeters`, `legDurationSeconds`, `estimatedArrival`, `arrivedAt`, `completedAt`, `status` (`RouteStopStatus`), and its joined `case`.
 
-**`Route`** — `id`, `name`, `collectorId`, `status` (`RouteStatus`), `plannedFor` (date), `originLatitude`, `originLongitude`, `totalDistanceMeters`, `totalDurationSeconds`, `encodedPolyline`, `provider` (`RouteProvider`), `optimizedAt`.
+| Method | Path | Body / Query | Returns |
+|---|---|---|---|
+| `POST` | `/routing/plan` | `PlanRouteDto` | 201, `Route` with `stops` |
+| `GET` | `/routing` | `?collectorId=` | 200, `Route[]` (newest first) |
+| `GET` | `/routing/:id` | — | 200, `Route` |
+| `PATCH` | `/routing/:id` | `{ name?, status? }` | 200, `Route` |
+| `DELETE` | `/routing/:id` | — | 200, empty |
 
-**`RouteStop`** — `id`, `routeId`, `caseId`, `sequence` (1-based), `legDistanceMeters`, `legDurationSeconds`, `estimatedArrival`, `arrivedAt`, `completedAt`, `status` (`RouteStopStatus`).
+**`PlanRouteDto`**
 
-Two unique constraints hold: no two stops share a `sequence` on the same route, and no case appears twice on the same route. Deleting a route cascades to its stops.
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `collectorId` | UUID | yes | must exist |
+| `name` | string | no | defaults to `Run YYYY-MM-DD` |
+| `plannedFor` | date string | no | defaults to today |
+| `originLatitude` | number | no* | depot latitude |
+| `originLongitude` | number | no* | depot longitude |
+| `maxStops` | integer | no | 1–25, defaults to 25 |
+| `radiusKm` | number | no | 0.1–100, defaults to 10 |
 
-Planned behaviour: select open, verified cases in a collector's area, then order them — `computeRoutes` for two stops, `computeRouteMatrix` plus a local nearest-neighbour pass for more, and an offline haversine fallback when no GCP credentials are configured. `provider` records which path produced a given plan.
+\* Omit both and the collector's `address` is geocoded instead — see below.
+
+### Which cases get selected
+
+A case is a candidate only when **all** hold: `caseVerified` is `true`, `status` is `pending` or `open`, it falls within `radiusKm` of the origin, and it is not already on a live route. Candidates are then sorted by straight-line distance from the depot and cut to `maxStops`, so the cap keeps the *nearest* cases.
+
+Cases on a route whose status is `completed` or `cancelled` are released and can be planned again. Planning does **not** modify the cases — it sets no `collectorId` and changes no `status`. Dispatch stays a separate action.
+
+With nothing available you get a 400: `No open, verified cases within 10km of the origin are available to plan`.
+
+### How the order is chosen
+
+`provider` on the returned route records which of three strategies ran:
+
+| `provider` | When | Distances | Durations | Polyline |
+|---|---|---|---|---|
+| `google.computeRoutes` | ≤ 2 stops, key present | road | road | **yes** |
+| `google.computeRouteMatrix` | > 2 stops, key present | road | road | no |
+| `offline.haversine` | no `GOOGLE_MAPS_API_KEY` | straight-line | **null** | no |
+
+Short runs go to `computeRoutes`, which orders the stops and returns a drawable polyline in one call. Longer runs buy a cost matrix once and order it locally with nearest-neighbour + 2-opt, which avoids paying for waypoint optimisation on every replan; the matrix endpoint returns no geometry, so `encodedPolyline` is `null` and the client should draw straight lines between stops.
+
+The offline fallback needs no key and makes no network call. Its distances are as-the-crow-flies and therefore optimistic, and **every duration is `null`** — without road data any number would be invented. Render time as `—` when `provider` is `offline.haversine`.
+
+### Origin and geocoding
+
+Send `originLatitude`/`originLongitude` and no lookup happens. Otherwise the collector's `address` is resolved through the **OpenWeather geocoding API**, and that answer is held in an **in-memory cache only** (24-hour TTL) — no collector coordinate is ever written to a table.
+
+Two consequences worth planning around:
+
+- The cache dies with the process, so the first plan after a restart re-geocodes.
+- OpenWeather resolves **place names, not street addresses**. `"Kampala,UG"` works; `"Plot 12, Nakawa"` will not. Prefer sending explicit coordinates from a map picker.
+
+Without `OPENWEATHER_API_KEY`, or when the address does not resolve, you get a 400 naming both fixes.
+
+### Configuration
+
+Both keys are read from the environment and both are optional:
+
+| Variable | Effect when unset |
+|---|---|
+| `GOOGLE_MAPS_API_KEY` | planner uses `offline.haversine` |
+| `OPENWEATHER_API_KEY` | plan requests must carry explicit origin coordinates |
 
 ---
 
@@ -568,7 +625,7 @@ Current, deliberate limitations. Plan around them.
 1. **No authentication or authorisation anywhere.** Any client can create users, dispatch cases, change any case's `status` or `caseVerified`, or post ML detections. This is the documented MVP scope.
 2. **User responses include the bcrypt password hash.** `GET /users`, `POST /users` and `POST /auth` all return it. Joined `reporter` and `staff` objects do not.
 3. **`PATCH /users/:id` does not hash passwords.** `POST /users` hashes with bcrypt, but `PATCH` writes the body through unchanged — a password sent to `PATCH` is stored in **plaintext** and will then fail login, which compares against a hash.
-4. **`/routing` endpoints are scaffolding** that return placeholder strings. The schema exists; the service does not.
+4. **Route planning does not dispatch.** A plan reserves its cases against re-planning, but sets no `collectorId` and changes no case `status`; do that with `PATCH /case/:id`.
 5. **Uploaded images are not served.** `imagePath` is a server-relative path with no static route configured.
 6. **`GET /users` has no stable ordering.** Other list endpoints do sort (`/case` and `/waste/instances` newest first, `/collectors` and `/waste/types` by name).
 7. **`role` is not enum-validated** on `CreateUserDto`; it accepts any string.

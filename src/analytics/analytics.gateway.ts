@@ -1,4 +1,4 @@
-import { OnModuleInit } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import {
   OnGatewayConnection,
   SubscribeMessage,
@@ -15,6 +15,8 @@ export const SNAPSHOT_EVENT = 'analytics:snapshot';
 // dashboard origin before this is exposed anywhere.
 @WebSocketGateway({ cors: { origin: '*' } })
 export class AnalyticsGateway implements OnGatewayConnection, OnModuleInit {
+  private readonly logger = new Logger(AnalyticsGateway.name);
+
   @WebSocketServer()
   private server!: Server;
 
@@ -29,9 +31,15 @@ export class AnalyticsGateway implements OnGatewayConnection, OnModuleInit {
   }
 
   // A dashboard gets the current picture immediately, then only deltas as
-  // writes happen — no polling.
+  // writes happen — no polling. A failure here must not reject inside
+  // socket.io's connection handler, so the client simply gets no initial
+  // snapshot and can retry with analytics:refresh.
   async handleConnection(client: Socket): Promise<void> {
-    client.emit(SNAPSHOT_EVENT, await this.analyticsService.snapshot());
+    try {
+      client.emit(SNAPSHOT_EVENT, await this.analyticsService.snapshot());
+    } catch (error: any) {
+      this.logger.error(`Could not send initial snapshot: ${error?.message ?? error}`);
+    }
   }
 
   // Escape hatch for a client that reconnects and wants to resync at once.
