@@ -44,12 +44,7 @@ export class UsersService {
 
   async findByEmail(email: string): Promise<User> {
     try {
-      const user = await this.userModel.findOne({ 
-        attributes: {
-          exclude: ['password'],
-        },
-        where: { email } 
-      });
+      const user = await this.userModel.findOne({ where: { email } });
       if (!user) {
         throw new NotFoundException('User not found');
       }
