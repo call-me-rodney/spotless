@@ -9,3 +9,13 @@ export interface UploadedImage {
     filename: string;
     path: string;
 }
+
+// What the waste classifier said about a case image.
+export interface ClassificationVerdict {
+    // The winning label exactly as the model reported it.
+    label: string;
+    // Its confidence, 0..1.
+    score: number;
+    // Whether `label` was read as "waste is present". This decides the case.
+    wastePresent: boolean;
+}

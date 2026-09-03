@@ -3,6 +3,7 @@ import {
   HttpException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
@@ -12,10 +13,16 @@ import { Collector } from '../collectors/models/collector.model';
 import { CreateCaseDto } from './dto/create-case.dto';
 import { UpdateCaseDto } from './dto/update-case.dto';
 import { Status, Priority } from './types/enum.type';
+import { ClassificationService } from './classification.service';
 
 @Injectable()
 export class CaseService {
-  constructor(@InjectModel(Case) private caseModel: typeof Case) {}
+  private readonly logger = new Logger(CaseService.name);
+
+  constructor(
+    @InjectModel(Case) private caseModel: typeof Case,
+    private readonly classification: ClassificationService,
+  ) {}
 
   // Joined on every read. The explicit attribute list keeps the reporter's
   // password hash from ever reaching a response body.
@@ -32,8 +39,9 @@ export class CaseService {
       throw new BadRequestException("'reporterId' is required");
     }
 
+    let created: Case;
     try {
-      return await this.caseModel.create({
+      created = await this.caseModel.create({
         imagePath,
         latitude,
         longitude,
@@ -45,6 +53,34 @@ export class CaseService {
       } as any);
     } catch (error: any) {
       throw this.asHttpError(error, 'Failed to create case');
+    }
+
+    // The row exists and is safe before the model is consulted, so a failing
+    // classifier can never lose a citizen's report.
+    return await this.applyClassification(created);
+  }
+
+  // The model's verdict is final: waste means verified and open for
+  // collection, no waste means rejected. There is no human step in between.
+  //
+  // A classifier that is disabled or unreachable leaves the case `pending`
+  // rather than failing the request — the report is already stored, and a
+  // pending case is a truthful "not yet judged".
+  private async applyClassification(subject: Case): Promise<Case> {
+    if (!this.classification.isEnabled()) {
+      return subject;
+    }
+
+    try {
+      const verdict = await this.classification.classifyImage(subject.imagePath);
+      return await subject.update(
+        verdict.wastePresent
+          ? { caseVerified: true, status: Status.open }
+          : { caseVerified: false, status: Status.rejected },
+      );
+    } catch (error: any) {
+      this.logger.warn(`Case ${subject.id} left pending, classification failed: ${error?.message ?? error}`);
+      return subject;
     }
   }
 

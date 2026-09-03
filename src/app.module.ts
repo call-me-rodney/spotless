@@ -14,7 +14,7 @@ import { WasteModule } from './waste/waste.module';
   imports: [
     SequelizeModule.forRoot({
       dialect: 'postgres',
-      uri: 'postgresql://neondb_owner:npg_9uz3KejaUvfB@ep-summer-bar-a5dkv1uv-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require',
+      uri: process.env.DATABASE_URL,
       // picks up every model registered via SequelizeModule.forFeature()
       autoLoadModels: true,
       // sync on boot; alter migrates existing tables to match the models

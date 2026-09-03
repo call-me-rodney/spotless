@@ -7,7 +7,7 @@ This document is the contract for anyone building against the server — the web
 - **Base URL:** `http://localhost:3000`
 - **Stack:** NestJS 11, Sequelize 6 (`sequelize-typescript`), PostgreSQL, Socket.IO
 - **Auth:** none. Role-based access, sessions and JWT are explicitly out of scope for the MVP, so **every endpoint below is unauthenticated**.
-- **Optional env vars:** `GOOGLE_MAPS_API_KEY`, `OPENWEATHER_API_KEY` — see [Routing](#routing). Everything works without them.
+- **Optional env vars:** `HUGGINGFACE_TOKEN` + `HUGGINGFACE_MODEL` (see [Cases](#automatic-classification)), `GOOGLE_MAPS_API_KEY`, `OPENWEATHER_API_KEY` (see [Routing](#routing)). Everything works without them, with the corresponding feature disabled.
 
 ```bash
 npm install
@@ -237,7 +237,32 @@ curl -X POST http://localhost:3000/case \
   -F "description=Overflowing skip near the market"
 ```
 
-The server discards the client's filename, stores the file as a generated UUID under `uploads/cases/`, and returns the relative path in `imagePath`. New cases always start `status: "pending"`, `caseVerified: false`, `priority: null`.
+The server discards the client's filename, stores the file as a generated UUID under `uploads/cases/`, and returns the relative path in `imagePath`. New cases are created `status: "pending"`, `caseVerified: false`, `priority: null` — then classified before the response is sent, so the `status` you get back already reflects the model's verdict.
+
+### Automatic classification
+
+Once the row is stored, the image goes to a Hugging Face model and the response is awaited. **The model's verdict is final — there is no human verification step.**
+
+| Model says | Resulting case |
+|---|---|
+| waste present | `caseVerified: true`, `status: "open"` — eligible for route planning |
+| no waste | `caseVerified: false`, `status: "rejected"` |
+| classifier disabled or unreachable | unchanged: `status: "pending"` |
+
+That third row matters: the case row is written **before** inference runs, so a model outage, a bad token or a cold-start timeout can never lose a citizen's report. The endpoint still returns 201 with the stored case; it simply stays `pending`.
+
+Because the call is synchronous, `POST /case` inherits the model's latency. A warm model adds well under a second; a cold serverless model can take far longer, and the server retries a 503 "loading" up to 3 times with a 4s gap before giving up. **Give the mobile client a generous upload timeout** — 60s or more — or it will abandon a request the server is still completing.
+
+Configure with two environment variables; leave either unset and classification is skipped entirely:
+
+| Variable | Value |
+|---|---|
+| `HUGGINGFACE_TOKEN` | your Hub access token |
+| `HUGGINGFACE_MODEL` | either a repo id (`owner/model-name`) **or** a dedicated Inference Endpoint URL (`https://….endpoints.huggingface.cloud`) |
+
+With a repo id the SDK selects an inference provider automatically. A custom fine-tune is frequently not served by any serverless provider — if you see `Failed to fetch inference provider mapping for model …`, deploy an Inference Endpoint and put its URL in the same variable instead.
+
+The model is currently **binary**: waste versus no waste. It does not name a waste type or count items, so classification creates no `wasteInstances` rows — those still arrive via `POST /waste/instances`.
 
 Failures return 400 and the uploaded file is deleted rather than left orphaned:
 
@@ -246,7 +271,7 @@ Failures return 400 and the uploaded file is deleted rather than left orphaned:
 - bad coordinate → `'latitude' must be a number between -90 and 90`
 - unknown `reporterId` → `'reporterId' does not match a known user`
 
-> The server does not serve the uploaded images back. `imagePath` is a path relative to the project root; static file serving is not configured yet.
+> **Fetching the photo back:** `imagePath` is served as a static file at the same origin. Prefix it with the base URL — `imagePath` of `uploads/cases/abc.png` is retrievable at `http://localhost:3000/uploads/cases/abc.png`. It returns the correct `Content-Type`, carries `Access-Control-Allow-Origin: *` so `fetch()` and canvas work as well as `<img src>`, and 404s for an unknown file.
 
 ### Updating a case — `UpdateCaseDto`
 
@@ -638,8 +663,8 @@ Current, deliberate limitations. Plan around them.
 
 1. **No authentication or authorisation anywhere.** Any client can create users, dispatch cases, change any case's `status` or `caseVerified`, or post ML detections. This is the documented MVP scope.
 2. **Route planning does not dispatch.** A plan reserves its cases against re-planning, but sets no `collectorId` and changes no case `status`; do that with `PATCH /case/:id`.
-3. **Uploaded images are not served.** `imagePath` is a server-relative path with no static route configured.
-4. **`GET /users` has no stable ordering.** Other list endpoints do sort (`/case` and `/waste/instances` newest first, `/collectors` and `/waste/types` by name).
-5. **`role` is not enum-validated** on `CreateUserDto`; it accepts any string.
-6. **The WebSocket gateway is single-instance.** Broadcasts reach only clients connected to the same process; running more than one server needs a Redis adapter or Postgres `LISTEN/NOTIFY`.
-7. **`sync: { alter: true }` runs on every boot.** Convenient in development, but it will reshape tables to match the models — replace with migrations before deploying.
+3. **`GET /users` has no stable ordering.** Other list endpoints do sort (`/case` and `/waste/instances` newest first, `/collectors` and `/waste/types` by name).
+4. **`role` is not enum-validated** on `CreateUserDto`; it accepts any string.
+5. **The WebSocket gateway is single-instance.** Broadcasts reach only clients connected to the same process; running more than one server needs a Redis adapter or Postgres `LISTEN/NOTIFY`.
+6. **`sync: { alter: true }` runs on every boot.** It does **not** wipe data — that is `force: true`, which drops and recreates tables. `alter` preserves rows, but it does add, retype and **drop** columns to match the models, and it re-runs the whole reconciliation against the remote database on every start. Replace with migrations before deploying.
+7. **The classifier is binary.** It decides waste versus no waste and nothing else, so an upload never sets `priority` and never creates `wasteInstances` rows. Waste types and quantities still arrive through `POST /waste/instances`.
