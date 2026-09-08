@@ -9,9 +9,17 @@ import { CollectorsModule } from './collectors/collectors.module';
 import { RoutingModule } from './routing/routing.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { WasteModule } from './waste/waste.module';
+import { createObserveModule } from '@nestjs/observe';
+
+export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
 @Module({
   imports: [
+    ObserveModule.forRoot({
+      appKey: process.env.OBSERVE_APP_KEY,
+      appSecret: process.env.OBSERVE_APP_SECRET,
+      serviceId: "spotless-server",
+    }),
     SequelizeModule.forRoot({
       dialect: 'postgres',
       uri: process.env.DATABASE_URL,

@@ -2,10 +2,12 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
-import { AppModule } from './app.module';
+import { AppModule, ObserveInstrument } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+  instrument: ObserveInstrument,
+  });
 
   // CORS first: these are Express middlewares and they run in registration
   // order, so registering the static handler above this would let it answer an
